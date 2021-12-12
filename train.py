@@ -5,6 +5,10 @@ import torch.optim as optim
 from model import GCN_GRU, Net
 from env import Simulator, Config
 from dataloader import *
+from collections import deque
+import torch.nn.functional as F
+
+GAMMA = 0.99
 
 def pretrain_embedding(config, entity_vocab, relation_vocab, model, optimizer):
 	model.train()
@@ -35,10 +39,12 @@ def train(config, item_vocab, model, optimizer):
 		out = policy_net.forward(state)
 		out = out.detach().numpy()
 		coin = random.random()
+		selected = 0
 		if coin < epsilon:
-			return actions[np.random.choice(range(len(actions)))]
+			selected = np.random.choice(range(len(actions)))
 		else:
-			return actions[np.argmax(out)]
+			selected = np.argmax(out)
+		return actions[selected], selected
 	
 	def memory_sampling(memory):
 		mini_batch = random.sample(memory, BATCH_SIZE)
@@ -54,6 +60,7 @@ def train(config, item_vocab, model, optimizer):
 		return torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), torch.tensor(r_lst), torch.tensor(s_prime_lst, dtype=torch.float), torch.tensor(done_mask_lst)
 
 	def optimize_model(memory):
+		max_val_list = []
 		state_batch, action_batch, reward_batch, next_state_batch, done_batch = memory_sampling(memory)
 		state_action_values = policy_net(state_batch)    
 		next_state_values = target_net(next_state_batch)
@@ -67,10 +74,10 @@ def train(config, item_vocab, model, optimizer):
 		expected_state_action_values = torch.tensor(expected_state_action_values)
 		loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)
 		#print('loss', loss)
-		optimizer = optim.RMSprop(self.policy_net.parameters())
+		optimizer = optim.RMSprop(policy_net.parameters())
 		optimizer.zero_grad()
 		loss.backward()
-		for param in self.policy_net.parameters():
+		for param in policy_net.parameters():
 			param.grad.data.clamp_(-1, 1)
 		optimizer.step()
 
@@ -105,13 +112,13 @@ def train(config, item_vocab, model, optimizer):
 				# candidates_embeddings' shape = (# of candidates, config.item_embed_dim)
 
 				# Recommendation using epsilon greedy policy
-				recommend_item_id = tmp_Q_eps_greedy(state=embedded_user_state, actions=candidates_embeddings)
+				recommend_item_id, selected = tmp_Q_eps_greedy(state=embedded_user_state, actions=candidates_embeddings)
 				reward = simulator.step(user_id, recommend_item_id)
 
 				# TODO
 				# Q learning
 				# Store transition to buffer
-				state, action, reward, next_state, done = embedded_state, recommend_item_id, reward, tmp_state_embed(x.append(recommend_item_id)), done # done을 어떻게 하지?
+				state, action, reward, next_state, done = embedded_user_state, recommend_item_id, reward, model([candidates[selected]]), done # done을 어떻게 하지?
 				Tuple = (state, action, reward, next_state, done)        
 				memory.append(Tuple)
 				# target update
@@ -134,12 +141,12 @@ if __name__ == '__main__':
 	model = GCN_GRU(Config(), 50, entity_vocab, relation_vocab)
 	optimizer = optim.SGD(model.parameters(), lr=0.01)
 	
-	print('Embedding pretrain by TransE...')
-	pretrain_embedding(Config(), entity_vocab, relation_vocab, model, optimizer)
+	# print('Embedding pretrain by TransE...')
+	# pretrain_embedding(Config(), entity_vocab, relation_vocab, model, optimizer)
 
-	print('Save embedding_pretrained model...')
-	path = './embedding_pretrained.pth'
-	torch.save(model.state_dict(),path)
+	# print('Save embedding_pretrained model...')
+	# path = './embedding_pretrained.pth'
+	# torch.save(model.state_dict(),path)
 	
 	print('Load embedding_pretrained model...')
 	path = './embedding_pretrained.pth'
