@@ -34,6 +34,7 @@ def train(config, item_vocab, model, optimizer):
 	BATCH_SIZE = 10
 
 	def tmp_Q_eps_greedy(state, actions):
+		# only 3 actions.?
 		epsilon = 0.3
 		state = torch.tensor(state, dtype=torch.float)
 		out = policy_net.forward(state)
@@ -53,11 +54,14 @@ def train(config, item_vocab, model, optimizer):
 		for transition in mini_batch:
 			t_state, t_action, t_reward, t_next_state, t_done = transition
 			s_lst.append(t_state)
-			a_lst.append([t_action])
-			r_lst.append([t_reward])
+			# a_lst.append([t_action])
+			# r_lst.append([t_reward])
+			a_lst.append(t_action)
+			r_lst.append(t_reward)
 			s_prime_lst.append(t_next_state)
-			done_mask_lst.append([t_done])
-		return torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), torch.tensor(r_lst), torch.tensor(s_prime_lst, dtype=torch.float), torch.tensor(done_mask_lst)
+			# done_mask_lst.append([t_done])
+			done_mask_lst.append(t_done)
+		return torch.stack(s_lst), torch.stack(a_lst), torch.tensor(r_lst), torch.stack(s_prime_lst), torch.tensor(done_mask_lst)
 
 	def optimize_model(memory):
 		max_val_list = []
@@ -70,6 +74,7 @@ def train(config, item_vocab, model, optimizer):
 		expected_state_action_values = state_action_values.tolist()
 		for i in range(len(state_action_values)):
 			action = action_batch[i]
+			# action is vector ?!!! action is an index ?!!!
 			expected_state_action_values[i][action] = (max_val_list[i] * GAMMA) + reward_batch[i]
 		expected_state_action_values = torch.tensor(expected_state_action_values)
 		loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)
@@ -112,12 +117,14 @@ def train(config, item_vocab, model, optimizer):
 				# candidates_embeddings' shape = (# of candidates, config.item_embed_dim)
 
 				# Recommendation using epsilon greedy policy
+				# action is item
 				recommend_item_id, selected = tmp_Q_eps_greedy(state=embedded_user_state, actions=candidates_embeddings)
 				reward = simulator.step(user_id, recommend_item_id)
 
 				# TODO
 				# Q learning
 				# Store transition to buffer
+				
 				state, action, reward, next_state, done = embedded_user_state, recommend_item_id, reward, model([candidates[selected]]), done # done을 어떻게 하지?
 				Tuple = (state, action, reward, next_state, done)        
 				memory.append(Tuple)
@@ -125,7 +132,7 @@ def train(config, item_vocab, model, optimizer):
 				total_step_count+=1
 				if total_step_count % TARGET_UPDATE ==0:
 					target_net.load_state_dict(policy_net.state_dict())
-				if len(memory) > 100:    
+				if len(memory) > 20:    
 					optimize_model(memory)
 
 if __name__ == '__main__':
