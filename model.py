@@ -173,11 +173,11 @@ class GRU(nn.Module):
 		return out	
 	
 class Net(nn.Module):
-    def __init__(self):
+    def __init__(self, out_dim):
         super().__init__()
         self.dense1 = nn.Linear(20, 128) 
         self.dense2 = nn.Linear(128, 128)
-        self.dense3 = nn.Linear(128, 3)
+        self.dense3 = nn.Linear(128, out_dim)
     
     def forward(self, x):
         x = F.relu(self.dense1(x))

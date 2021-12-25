@@ -28,10 +28,10 @@ def pretrain_embedding(config, entity_vocab, relation_vocab, model, optimizer):
 
 def train(config, item_vocab, model, optimizer):
 	memory = deque(maxlen=10000)
-	policy_net = Net()
-	target_net = Net()
 	TARGET_UPDATE = 100
 	BATCH_SIZE = 10
+	policy_net = Net(50)
+	target_net = Net(50)
 
 	def tmp_Q_eps_greedy(state, actions):
 		# only 3 actions.?
@@ -75,13 +75,13 @@ def train(config, item_vocab, model, optimizer):
 		for i in range(len(state_action_values)):
 			action = action_batch[i]
 			# action is vector ?!!! action is an index ?!!!
-			expected_state_action_values[i][action] = (max_val_list[i] * GAMMA) + reward_batch[i]
+			expected_state_action_values[i][action.argmax().item()] = (max_val_list[i] * GAMMA) + reward_batch[i]
 		expected_state_action_values = torch.tensor(expected_state_action_values)
-		loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)
+		loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.detach())
 		#print('loss', loss)
 		optimizer = optim.RMSprop(policy_net.parameters())
 		optimizer.zero_grad()
-		loss.backward()
+		loss.backward(retain_graph=True)
 		for param in policy_net.parameters():
 			param.grad.data.clamp_(-1, 1)
 		optimizer.step()
